@@ -1,0 +1,207 @@
+// ==UserScript==
+// @name         777+deepseek
+// @namespace    http://tampermonkey.net/
+// @version      3
+// @description  Идеальная структура MOTD
+// @match        *://*.drednot.io/*
+// @grant        none
+// @run-at       document-idle
+// ==/UserScript==
+
+(function(){
+'use strict';
+const log=(...a)=>console.log('%c[MOTD]','color:#0f0',...a);
+
+// --- ПРАЗДНИКИ ---
+function easter(y){const a=y%4,b=y%7,c=y%19,d=(19*c+15)%30,e=(2*a+4*b-d+34)%7,m=Math.floor((d+e+114)/31),dd=((d+e+114)%31)+1,j=new Date(y,m-1,dd);j.setDate(j.getDate()+13);return j;}
+function holidays(y){
+  const E=easter(y);
+  const mS=new Date(E);mS.setDate(E.getDate()-56);
+  const mE=new Date(mS);mE.setDate(mS.getDate()+6);
+  const D=(m,d)=>new Date(y,m-1,d);
+  return [
+    {n:"Новый год",s:D(1,1),e:D(1,1)},{n:"Рождество",s:D(1,7),e:D(1,7)},{n:"Старый НГ",s:D(1,14),e:D(1,14)},
+    {n:"Крещение",s:D(1,19),e:D(1,19)},{n:"Татьянин день",s:D(1,25),e:D(1,25)},{n:"Валентин",s:D(2,14),e:D(2,14)},
+    {n:"23 Февраля",s:D(2,23),e:D(2,23)},{n:"Масленица",s:mS,e:mE},{n:"8 Марта",s:D(3,8),e:D(3,8)},
+    {n:"День смеха",s:D(4,1),e:D(4,1)},{n:"Пасха",s:E,e:E},{n:"1 Мая",s:D(5,1),e:D(5,1)},
+    {n:"День Победы",s:D(5,9),e:D(5,9)},{n:"День детей",s:D(6,1),e:D(6,1)},{n:"День России",s:D(6,12),e:D(6,12)},
+    {n:"День семьи",s:D(7,8),e:D(7,8)},{n:"День ВДВ",s:D(8,2),e:D(8,2)},{n:"Хэллоуин",s:D(10,31),e:D(10,31)},
+    {n:"Единство",s:D(11,4),e:D(11,4)},{n:"Конституция",s:D(12,12),e:D(12,12)},{n:"Новый год",s:D(12,31),e:D(12,31)},
+  ];
+}
+
+function nearestHoliday(now){
+  let y=now.getFullYear(); let hs=holidays(y);
+  if(now.getMonth()===11&&now.getDate()>25) hs=hs.concat(holidays(y+1));
+  hs.sort((a,b)=>a.s-b.s);
+  const day = 86400000;
+
+  for(const h of hs){
+    if(now>=h.s&&now<=h.e) return {...h, st:"сегодня"};
+  }
+  for(const h of hs){
+    if(h.s > now){
+      const d = Math.ceil((h.s - now) / day);
+      return {...h, st:`ещё ${d}д`};
+    }
+  }
+  return null;
+}
+
+// --- ХЕЛПЕРЫ ---
+const fd=d=>d.toLocaleDateString('ru-RU');
+const ft=d=>d.toLocaleTimeString('ru-RU',{hour12:false});
+const dn=d=>["Вс","Пн","Вт","Ср","Чт","Пт","Сб"][d.getDay()];
+
+// --- СБОРКА ТЕКСТА ---
+function buildText(){
+  const now=new Date();
+  const msk=new Date(now.toLocaleString('en-US',{timeZone:'Europe/Moscow'}));
+  const y=msk.getFullYear();
+  const m=msk.getMonth();
+  const d=msk.getDate();
+
+  const leap = (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0);
+  const leapText = leap ? "весокосный" : "обычный";
+  let nextLeap = y + 1;
+  while (!((nextLeap % 4 === 0 && nextLeap % 100 !== 0) || (nextLeap % 400 === 0))) {
+      nextLeap++;
+  }
+
+  const monthNames = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+  const monthZodiacs = ["Козерог", "Водолей", "Рыбы", "Овен", "Телец", "Близнецы", "Рак", "Лев", "Дева", "Весы", "Скорпион", "Стрелец"];
+  const seasons = ["Зима", "Зима", "Весна", "Весна", "Весна", "Лето", "Лето", "Лето", "Осень", "Осень", "Осень", "Зима"];
+
+  // --- ЛЕВАЯ ЧАСТЬ (КАЛЕНДАРЬ) ---
+  const f = new Date(y, m, 1), l = new Date(y, m + 1, 0);
+  const sw = f.getDay() || 7;
+
+  let calLines = [];
+  calLines.push("Пн | Вт | Ср | Чт | Пт | Сб | Вс |");
+
+  const emptyCells = ["       |", "      |", "      |", "       |", "      |", "     |"];
+
+  let currentLine = "";
+  let currentLineCells = 0;
+
+  for (let i = 1; i < sw; i++) {
+      currentLine += emptyCells[i-1];
+      currentLineCells++;
+  }
+
+  for (let day = 1; day <= l.getDate(); day++) {
+      const isToday = day === d;
+      const dayStr = day.toString().padStart(2, "0");
+      let cell = ` ${dayStr} |`;
+      if (isToday) cell = `༽${dayStr}༼|`;
+      currentLine += cell;
+      currentLineCells++;
+
+      if (currentLineCells % 7 === 0) {
+          calLines.push(currentLine);
+          currentLine = "";
+      }
+  }
+
+  if (currentLine) {
+      while (currentLineCells % 7 !== 0) {
+          currentLine += "    |";
+          currentLineCells++;
+      }
+      calLines.push(currentLine);
+  }
+
+  // --- ПРАВАЯ ЧАСТЬ (ИНФОРМАЦИЯ) ---
+  const h = nearestHoliday(msk);
+  let hName = h ? h.n : "";
+  let hDate = "";
+  if (h) {
+      const dS = h.s.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit'});
+      const dE = h.e.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit'});
+      hDate = (dS === dE ? dS : `${dS}-${dE}`) + ` [${h.st}]`;
+  }
+
+  const weekStr = `нч${Math.ceil((d + sw - 1) / 7)}/кн${Math.ceil((l.getDate() - d + 1) / 7)}`;
+
+  let rightLines = [
+      `${ft(msk)} ${y}${leapText}`,
+      `весокосный ${nextLeap}`,
+      `Неделя ${weekStr}`,
+      `${seasons[m]}|${monthZodiacs[m]}`,
+      h ? hName : "",
+      h ? `с ${hDate}` : "",
+      `${monthNames[m]}|${d} ${dn(msk)}| ${fd(msk)}`,
+      `https://github.com/karpovvitek35-max/-.git`
+  ];
+
+  // --- СКЛЕЙКА ---
+  let maxLen = Math.max(calLines.length, rightLines.length);
+  let finalLines = [];
+
+  for (let i = 0; i < maxLen; i++) {
+      let cal = calLines[i] !== undefined ? calLines[i] : null;
+      let right = rightLines[i] !== undefined ? rightLines[i] : "";
+
+      if (cal === null && right.startsWith("http")) {
+          // Строка с URL: без отступа, прижата к левому краю
+          finalLines.push(right);
+      } else if (cal === null) {
+          finalLines.push(" ".repeat(35) + right);
+      } else {
+          finalLines.push(cal + right);
+      }
+  }
+
+  return finalLines.join("\n");
+}
+
+// --- ПОИСК И ВСТАВКА ---
+function findMotd(doc=document){
+  const el=doc.getElementById('motd-edit-text');
+  if(el)return el;
+  for(const i of doc.querySelectorAll('iframe')){
+    try{const r=findMotd(i.contentDocument);if(r)return r;}catch(e){}
+  }
+  return null;
+}
+
+function apply(){
+  const box=findMotd();
+  if(!box){setStatus("Поле не найдено.");return;}
+  if (document.activeElement === box) return;
+
+  const text=buildText();
+  if(box.value!==text){
+    box.value=text;
+
+    const saveBtn = document.querySelector('button.btn-green[onclick*="saveMotd"]') ||
+                    [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Save');
+
+    if (saveBtn) {
+        saveBtn.click();
+        setStatus("✅ Сохранено! " + ft(new Date()));
+    } else if (typeof window.saveMotd === 'function') {
+        window.saveMotd(true);
+        setStatus("✅ Сохранено!");
+    }
+  }
+}
+
+// --- ПАНЕЛЬ СТАТУСА ---
+const panel=document.createElement('div');
+panel.style.cssText="position:fixed;bottom:10px;right:10px;z-index:999999;background:#111;color:#0f0;font:12px monospace;padding:8px;border:1px solid #0f0;border-radius:4px;max-width:340px;white-space:pre-wrap;";
+panel.textContent="MOTD: инициализация...";
+document.body.appendChild(panel);
+function setStatus(s){panel.textContent="MOTD: "+s;}
+
+// --- ЦИКЛ ---
+let last=0;
+setInterval(()=>{
+  if(Date.now()-last>=1000){
+    last=Date.now();
+    apply();
+  }
+},500);
+
+log("Скрипт 777+deepseek v3 запущен.");
+})();
